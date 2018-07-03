@@ -1,6 +1,6 @@
 export
 
-BINS = step0_repl step1_read_print
+BINS = step0_repl step1_read_print step2_eval
 
 all: clean $(BINS)
 

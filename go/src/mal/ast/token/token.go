@@ -26,10 +26,10 @@ const (
 	RBRACE // }
 
 	// Math functions
-	ADD // +
-	SUB // -
-	MUL // *
-	QUO // /
+	// ADD // +
+	// SUB // -
+	// MUL // *
+	// QUO // /
 
 	TILDEAT     // ~@
 	SINGLEQUOTE // '

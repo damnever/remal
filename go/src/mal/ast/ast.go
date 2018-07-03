@@ -138,6 +138,10 @@ func (ast *AST) processAtom() (Node, error) {
 		node, err = ast.processAtomContainer(Vector, t)
 	case token.LBRACE: // {
 		node, err = ast.processAtomContainer(Map, t)
+	case token.NIL:
+		node = ast.processKindAtomSingle(Nil, t)
+	case token.BOOL:
+		node = ast.processKindAtomSingle(Bool, t)
 	case token.INT:
 		node = ast.processKindAtomSingle(Int, t)
 	case token.FLOAT:

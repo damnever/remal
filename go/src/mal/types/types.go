@@ -3,15 +3,30 @@ package types
 import (
 	"container/list"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
-type Valuer interface {
-	String() string
-	IsEqaulTo(oth Valuer) bool
-}
+type (
+	Valuer interface {
+		fmt.Stringer
+		IsEqaulTo(oth Valuer) bool
+	}
+	Number interface {
+		Valuer
+		Add(Number) Number
+		Sub(Number) Number
+		Mul(Number) Number
+		Div(Number) Number
+	}
+	MapKey interface {
+		Valuer
+		Key()
+	}
+)
 
 type (
+	Raw     struct{ x fmt.Stringer }
 	Nil     struct{}
 	Bool    bool
 	Int     int64
@@ -19,9 +34,26 @@ type (
 	String  string
 	Keyword string
 	List    struct{ *list.List }
-	Vector  struct{ elems []Valuer }
+	Vector  []Valuer
 	Map     map[Valuer]Valuer
+	Func    struct {
+		Signature string
+		NArg      int
+	}
 )
+
+func NewRaw(x fmt.Stringer) Raw {
+	return Raw{x: x}
+}
+
+func (r Raw) IsEqaulTo(oth Valuer) bool {
+	o, ok := oth.(Raw)
+	return ok && r == o
+}
+
+func (r Raw) String() string {
+	return r.x.String()
+}
 
 func (n Nil) IsEqaulTo(oth Valuer) bool {
 	_, ok := oth.(Nil)
@@ -30,6 +62,52 @@ func (n Nil) IsEqaulTo(oth Valuer) bool {
 
 func (n Nil) String() string {
 	return "nil"
+}
+
+func NewInt(v string) Int {
+	x, _ := strconv.ParseInt(v, 10, 64)
+	return Int(x)
+}
+
+func (i Int) Add(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return i + x
+	case Float:
+		return Float(i) + x
+	}
+	panic("try again?")
+}
+
+func (i Int) Sub(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return i - x
+	case Float:
+		return Float(i) - x
+	}
+	panic("try again?")
+}
+
+func (i Int) Mul(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return i * x
+	case Float:
+		return Float(i) * x
+	}
+	panic("try again?")
+}
+
+func (i Int) Div(oth Number) Number {
+	// FIXME: divide by zero
+	switch x := oth.(type) {
+	case Int:
+		return i / x
+	case Float:
+		return Float(i) / x
+	}
+	panic("try again?")
 }
 
 func (i Int) IsEqaulTo(oth Valuer) bool {
@@ -41,13 +119,65 @@ func (i Int) String() string {
 	return fmt.Sprintf("%d", i)
 }
 
+func NewFloat(v string) Float {
+	x, _ := strconv.ParseFloat(v, 64)
+	return Float(x)
+}
+func (f Float) Add(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return f + Float(x)
+	case Float:
+		return f + x
+	}
+	panic("try again?")
+}
+
+func (f Float) Sub(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return f - Float(x)
+	case Float:
+		return f - x
+	}
+	panic("try again?")
+}
+
+func (f Float) Mul(oth Number) Number {
+	switch x := oth.(type) {
+	case Int:
+		return f * Float(x)
+	case Float:
+		return f * x
+	}
+	panic("try again?")
+}
+
+func (f Float) Div(oth Number) Number {
+	// FIXME: divide by zero
+	switch x := oth.(type) {
+	case Int:
+		return f / Float(x)
+	case Float:
+		return f / x
+	}
+	panic("try again?")
+}
+
 func (f Float) IsEqaulTo(oth Valuer) bool {
 	o, ok := oth.(Float)
 	return ok && f == o
 }
 
 func (f Float) String() string {
-	return fmt.Sprintf("%d", f)
+	return fmt.Sprintf("%f", f)
+}
+
+func NewBool(v string) Bool {
+	if v == "true" {
+		return true
+	}
+	return false
 }
 
 func (b Bool) IsEqaulTo(oth Valuer) bool {
@@ -71,14 +201,17 @@ func (s String) String() string {
 	return fmt.Sprintf("\"%s\"", string(s))
 }
 
+func (String) Key() {}
+
 func (k Keyword) IsEqaulTo(oth Valuer) bool {
 	o, ok := oth.(Keyword)
 	return ok && k == o
 }
 
 func (k Keyword) String() string {
-	return fmt.Sprintf(":\"%s\"", string(k))
+	return fmt.Sprintf(":%s", string(k))
 }
+func (Keyword) Key() {}
 
 func (l List) IsEqaulTo(oth Valuer) bool {
 	o, ok := oth.(List)
@@ -118,43 +251,43 @@ func (l List) String() string {
 	return strings.Join(elems, "")
 }
 
-func (v Vector) Append(elems ...Valuer) {
-	v.elems = append(v.elems, elems...)
+func (v *Vector) Append(elems ...Valuer) {
+	*v = append(*v, elems...)
 }
 
-func (v Vector) Remove(elem Valuer) {
-	for i, x := range v.elems {
+func (v *Vector) Remove(elem Valuer) {
+	for i, x := range *v {
 		if x.IsEqaulTo(elem) {
-			copy(v.elems[i:], v.elems[i+1:])
-			n := len(v.elems) - 1
-			v.elems[n] = nil
-			v.elems = v.elems[:n]
+			copy((*v)[i:], (*v)[i+1:])
+			n := len(*v) - 1
+			(*v)[n] = nil
+			*v = (*v)[:n]
 			break
 		}
 	}
 }
 
-func (v Vector) IsEqaulTo(oth Valuer) bool {
-	o, ok := oth.(Vector)
+func (v *Vector) IsEqaulTo(oth Valuer) bool {
+	o, ok := oth.(*Vector)
 	if !ok {
 		return false
 	}
 
-	n := len(v.elems)
-	if n != len(o.elems) {
+	n := len(*v)
+	if n != len(*o) {
 		return false
 	}
 	for i := 0; i < n; i++ {
-		if !v.elems[i].IsEqaulTo(o.elems[i]) {
+		if !(*v)[i].IsEqaulTo((*o)[i]) {
 			return false
 		}
 	}
 	return true
 }
 
-func (v Vector) String() string {
+func (v *Vector) String() string {
 	elems := []string{"["}
-	for i, elem := range v.elems {
+	for i, elem := range *v {
 		if i == 0 {
 			elems = append(elems, fmt.Sprintf("%s", elem))
 		} else {
@@ -195,4 +328,17 @@ func (m Map) String() string {
 	}
 	elems = append(elems, "}")
 	return strings.Join(elems, "")
+}
+
+func (f Func) Exec(args ...Valuer) Valuer {
+	return nil
+}
+
+func (f Func) IsEqaulTo(oth Valuer) bool {
+	o, ok := oth.(Func)
+	return ok && f.Signature == o.Signature
+}
+
+func (f Func) String() string {
+	return f.Signature
 }

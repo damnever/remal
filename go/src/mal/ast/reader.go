@@ -100,10 +100,10 @@ func (r *tokenReader) nexttoken() (tw TokenWraper, err error) {
 		t, err = r.readKeyword()
 	case '\'', '`', '~', '^', '@':
 		t, err = r.readSpecialSymbol()
-	case '+', '-':
+	case '-': // '+' ????
 		var bs []byte
 		bs, err = r.peekBytes(2)
-		if err == nil && (bs[1] >= 0 && bs[1] <= 9) {
+		if err == nil && (bs[1] >= '0' && bs[1] <= '9') {
 			t, err = r.readNumber()
 		} else {
 			t, err = r.readSymbols()
@@ -241,12 +241,20 @@ func (r *tokenReader) readSpecialSymbol() (t token.Token, err error) {
 }
 
 func (r *tokenReader) readSymbols() (t token.Token, err error) {
-	if err = r.findSeqBytes(); err == nil {
-		if r.buf.Len() == 0 {
-			t = token.EOF
-		} else {
-			t = token.ASNSCS
-		}
+	if err = r.findSeqBytes(); err != nil {
+		return
+	}
+	if r.buf.Len() == 0 {
+		t = token.EOF
+		return
+	}
+	switch r.buf.String() {
+	case "nil":
+		t = token.NIL
+	case "true", "false":
+		t = token.BOOL
+	default:
+		t = token.ASNSCS
 	}
 	return
 }
