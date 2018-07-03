@@ -102,15 +102,15 @@ func (e *Evaler) evalAtomContainer(ac *ast.AtomContainer) types.Valuer {
 		m := types.Map{}
 		var k types.Valuer
 		for _, elem := range ac.Elems {
+			v := e.evalNode(elem)
+			if v == nil {
+				continue
+			}
 			if k == nil {
-				if vv := e.evalNode(elem); vv != nil {
-					k = vv.(types.MapKey)
-				}
+				k = v.(types.MapKey)
 			} else {
-				if vv := e.evalNode(elem); vv != nil {
-					m[k] = vv
-					k = nil
-				}
+				m[k] = v
+				k = nil
 			}
 		}
 		return m
