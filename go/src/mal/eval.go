@@ -26,7 +26,8 @@ func NewEvaler(env *Env) *Evaler {
 
 func (e *Evaler) EvalAST(a *ast.AST) (vs []types.Valuer, err error) {
 	a.Walk(func(node ast.Node) bool {
-		v, err := e.evalNode(node)
+		var v types.Valuer
+		v, err = e.evalNode(node)
 		if err == errIgnore {
 			return true
 		}
@@ -44,7 +45,11 @@ func (e *Evaler) evalNode(node ast.Node) (types.Valuer, error) {
 	case *ast.Comment:
 		return nil, errIgnore
 	case *ast.Symbol:
-		return e.env.Get(x.Content)
+		env, err := e.env.Get(x.Content)
+		if err != nil {
+			return nil, fmt.Errorf("[%s] %v", x.Pos(), err)
+		}
+		return env, nil
 	case *ast.AtomSingle:
 		return e.evalAtomSingle(x), nil
 	case *ast.AtomContainer:
