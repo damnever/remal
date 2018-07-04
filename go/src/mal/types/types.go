@@ -23,6 +23,8 @@ type (
 		Valuer
 		Key()
 	}
+
+	FuncType func(...Valuer) (Valuer, error)
 )
 
 type (
@@ -37,8 +39,8 @@ type (
 	Vector  []Valuer
 	Map     map[Valuer]Valuer
 	Func    struct {
-		Signature string
-		NArg      int
+		signature string
+		Exec      FuncType
 	}
 )
 
@@ -123,6 +125,7 @@ func NewFloat(v string) Float {
 	x, _ := strconv.ParseFloat(v, 64)
 	return Float(x)
 }
+
 func (f Float) Add(oth Number) Number {
 	switch x := oth.(type) {
 	case Int:
@@ -211,6 +214,7 @@ func (k Keyword) IsEqaulTo(oth Valuer) bool {
 func (k Keyword) String() string {
 	return fmt.Sprintf(":%s", string(k))
 }
+
 func (Keyword) Key() {}
 
 func (l List) IsEqaulTo(oth Valuer) bool {
@@ -330,15 +334,14 @@ func (m Map) String() string {
 	return strings.Join(elems, "")
 }
 
-func (f Func) Exec(args ...Valuer) Valuer {
-	return nil
+func NewFunc(sign string, fn FuncType) Func {
+	return Func{signature: sign, Exec: fn}
 }
 
-func (f Func) IsEqaulTo(oth Valuer) bool {
-	o, ok := oth.(Func)
-	return ok && f.Signature == o.Signature
+func (f Func) IsEqaulTo(Valuer) bool {
+	return false
 }
 
 func (f Func) String() string {
-	return f.Signature
+	return fmt.Sprintf("func<%s:%v>", f.signature, f.Exec)
 }

@@ -54,7 +54,6 @@ func (r *tokenReader) Next() (tw TokenWraper, err error) {
 		r.tokens = r.tokens[:n-1]
 		return
 	}
-
 	return r.nexttoken()
 }
 

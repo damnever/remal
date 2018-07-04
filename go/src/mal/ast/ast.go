@@ -167,10 +167,6 @@ func (ast *AST) processKindAtomSingle(kind AtomKind, t TokenWraper) Node {
 func (ast *AST) processAtomSingle(t TokenWraper) (node Node, err error) {
 	// FIXME(damnever)
 	switch t.Content {
-	// case "nil":
-	// node = ast.processKindAtomSingle(Nil, t)
-	// case "true", "false":
-	// node = ast.processKindAtomSingle(Bool, t)
 	default:
 		node = &Symbol{
 			pos:     t.Pos,

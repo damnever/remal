@@ -1,73 +1,115 @@
 package mal
 
 import (
+	"errors"
+	"fmt"
+
 	"mal/ast"
 	"mal/types"
 )
 
-type Evaler struct{}
+var (
+	errIgnore = errors.New("ignore")
+)
 
-func (e *Evaler) EvalAST(a *ast.AST) []types.Valuer {
-	vs := []types.Valuer{}
-	a.Walk(func(node ast.Node) bool {
-		if v := e.evalNode(node); v != nil {
-			vs = append(vs, v)
-		}
-		return true
-	})
-	return vs
+type Evaler struct {
+	env *Env
 }
 
-func (e *Evaler) evalNode(node ast.Node) types.Valuer {
+func NewEvaler(env *Env) *Evaler {
+	env.Set("+", types.NewFunc("+", funcAdd))
+	env.Set("-", types.NewFunc("-", funcSub))
+	env.Set("*", types.NewFunc("*", funcMul))
+	env.Set("/", types.NewFunc("/", funcDiv))
+	return &Evaler{env: env}
+}
+
+func (e *Evaler) EvalAST(a *ast.AST) (vs []types.Valuer, err error) {
+	a.Walk(func(node ast.Node) bool {
+		v, err := e.evalNode(node)
+		if err == errIgnore {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		vs = append(vs, v)
+		return true
+	})
+	return
+}
+
+func (e *Evaler) evalNode(node ast.Node) (types.Valuer, error) {
 	switch x := node.(type) {
 	case *ast.Comment:
-		return nil
+		return nil, errIgnore
 	case *ast.Symbol:
-		return types.NewRaw(x)
+		return e.env.Get(x.Content)
 	case *ast.AtomSingle:
-		return e.evalAtomSingle(x)
+		return e.evalAtomSingle(x), nil
 	case *ast.AtomContainer:
 		return e.evalAtomContainer(x)
 	case *ast.List:
 		return e.evalList(x)
 	default:
 	}
-	return types.NewRaw(node)
+	return types.NewRaw(node), nil
 }
 
-func (e *Evaler) evalList(l *ast.List) types.Valuer {
-	nelems := len(l.Elems)
-	if nelems != 3 {
-		return types.NewRaw(l)
-	}
+func (e *Evaler) evalList(l *ast.List) (types.Valuer, error) {
 	symbol, ok := l.Elems[0].(*ast.Symbol)
 	if !ok {
-		return types.NewRaw(l)
+		return types.NewRaw(l), nil
 	}
+
+	// FIXME(damnever): fuck..
 	switch symbol.Content {
-	case "+", "-", "*", "/":
-	default:
-		return types.NewRaw(l)
-	}
-	nums := make([]types.Number, nelems)
-	for i, elem := range l.Elems[1:] {
-		num, ok := e.evalNode(elem).(types.Number)
-		if !ok {
-			return types.NewRaw(l)
+	case "def!":
+		v, err := e.evalNode(l.Elems[2])
+		if err != nil {
+			return nil, err
 		}
-		nums[i] = num
+		e.env.Set(l.Elems[1].(*ast.Symbol).Content, v)
+		return v, nil
+	case "let*":
+		env := NewEnv(e.env)
+		var elems []ast.Node
+		switch x := l.Elems[1].(type) {
+		case *ast.List:
+			elems = x.Elems
+		case *ast.AtomContainer:
+			elems = x.Elems
+		}
+		for i := 0; i < len(elems); i = i + 2 {
+			v, _ := NewEvaler(env).evalNode(elems[i+1])
+			env.Set(elems[i].(*ast.Symbol).Content, v)
+		}
+		return NewEvaler(env).evalNode(l.Elems[2])
+	default:
 	}
-	switch symbol.Content {
-	case "+":
-		return nums[0].Add(nums[1])
-	case "-":
-		return nums[0].Sub(nums[1])
-	case "*":
-		return nums[0].Mul(nums[1])
-	case "/":
-		return nums[0].Div(nums[1])
+	ev, err := e.env.Get(symbol.Content)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] %v", symbol.Pos(), err)
 	}
-	panic("how dare you")
+	if fn, ok := ev.(types.Func); ok {
+		return e.evalFunc(fn, l.Elems[1:])
+	}
+	return ev, nil
+}
+
+func (e *Evaler) evalFunc(fn types.Func, nodes []ast.Node) (types.Valuer, error) {
+	args := make([]types.Valuer, len(nodes))
+	for i, node := range nodes {
+		v, err := e.evalNode(node)
+		if err != nil {
+			if err == errIgnore {
+				continue
+			}
+			return nil, err
+		}
+		args[i] = v
+	}
+	return fn.Exec(args...)
 }
 
 func (e *Evaler) evalAtomSingle(as *ast.AtomSingle) types.Valuer {
@@ -88,23 +130,31 @@ func (e *Evaler) evalAtomSingle(as *ast.AtomSingle) types.Valuer {
 	panic("how dare you")
 }
 
-func (e *Evaler) evalAtomContainer(ac *ast.AtomContainer) types.Valuer {
+func (e *Evaler) evalAtomContainer(ac *ast.AtomContainer) (types.Valuer, error) {
 	switch ac.Kind {
 	case ast.Vector:
 		vec := &types.Vector{}
 		for _, elem := range ac.Elems {
-			if v := e.evalNode(elem); v != nil {
-				vec.Append(v)
+			v, err := e.evalNode(elem)
+			if err != nil {
+				if err == errIgnore {
+					continue
+				}
+				return nil, err
 			}
+			vec.Append(v)
 		}
-		return vec
+		return vec, nil
 	case ast.Map:
 		m := types.Map{}
 		var k types.Valuer
 		for _, elem := range ac.Elems {
-			v := e.evalNode(elem)
-			if v == nil {
-				continue
+			v, err := e.evalNode(elem)
+			if err != nil {
+				if err == errIgnore {
+					continue
+				}
+				return nil, err
 			}
 			if k == nil {
 				k = v.(types.MapKey)
@@ -113,7 +163,10 @@ func (e *Evaler) evalAtomContainer(ac *ast.AtomContainer) types.Valuer {
 				k = nil
 			}
 		}
-		return m
+		if k != nil {
+			return nil, fmt.Errorf("[%s] key/value pair required", ac.End())
+		}
+		return m, nil
 	}
 	panic("how dare you")
 }
