@@ -3,13 +3,14 @@ package types
 import (
 	"container/list"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
 type (
 	Valuer interface {
-		fmt.Stringer
+		SPrint(readable bool) string
 		IsEqaulTo(oth Valuer) bool
 	}
 	Number interface {
@@ -18,6 +19,7 @@ type (
 		Sub(Number) Number
 		Mul(Number) Number
 		Div(Number) Number
+		Compare(Number) int
 	}
 	MapKey interface {
 		Valuer
@@ -39,8 +41,8 @@ type (
 	Vector  []Valuer
 	Map     map[Valuer]Valuer
 	Func    struct {
-		signature string
-		Exec      FuncType
+		name string
+		Exec FuncType
 	}
 )
 
@@ -53,7 +55,7 @@ func (r Raw) IsEqaulTo(oth Valuer) bool {
 	return ok && r == o
 }
 
-func (r Raw) String() string {
+func (r Raw) SPrint(readable bool) string {
 	return r.x.String()
 }
 
@@ -62,7 +64,7 @@ func (n Nil) IsEqaulTo(oth Valuer) bool {
 	return ok
 }
 
-func (n Nil) String() string {
+func (n Nil) SPrint(readable bool) string {
 	return "nil"
 }
 
@@ -112,12 +114,22 @@ func (i Int) Div(oth Number) Number {
 	panic("try again?")
 }
 
+func (i Int) Compare(oth Number) int {
+	switch x := oth.(type) {
+	case Int:
+		return int(i - x)
+	case Float:
+		return int(math.Ceil(float64(Float(i) - x)))
+	}
+	panic("try again?")
+}
+
 func (i Int) IsEqaulTo(oth Valuer) bool {
 	o, ok := oth.(Int)
 	return ok && i == o
 }
 
-func (i Int) String() string {
+func (i Int) SPrint(readable bool) string {
 	return fmt.Sprintf("%d", i)
 }
 
@@ -167,12 +179,22 @@ func (f Float) Div(oth Number) Number {
 	panic("try again?")
 }
 
+func (f Float) Compare(oth Number) int {
+	switch x := oth.(type) {
+	case Int:
+		return int(math.Ceil(float64(f - Float(x))))
+	case Float:
+		return int(math.Ceil(float64(f - x)))
+	}
+	panic("try again?")
+}
+
 func (f Float) IsEqaulTo(oth Valuer) bool {
 	o, ok := oth.(Float)
 	return ok && f == o
 }
 
-func (f Float) String() string {
+func (f Float) SPrint(readable bool) string {
 	return fmt.Sprintf("%f", f)
 }
 
@@ -188,7 +210,7 @@ func (b Bool) IsEqaulTo(oth Valuer) bool {
 	return ok && b == o
 }
 
-func (b Bool) String() string {
+func (b Bool) SPrint(readable bool) string {
 	if b {
 		return "true"
 	}
@@ -200,8 +222,11 @@ func (s String) IsEqaulTo(oth Valuer) bool {
 	return ok && s == o
 }
 
-func (s String) String() string {
-	return fmt.Sprintf("\"%s\"", string(s))
+func (s String) SPrint(readable bool) string {
+	if readable {
+		return fmt.Sprintf("\"%s\"", string(s))
+	}
+	return string(s)
 }
 
 func (String) Key() {}
@@ -211,17 +236,41 @@ func (k Keyword) IsEqaulTo(oth Valuer) bool {
 	return ok && k == o
 }
 
-func (k Keyword) String() string {
+func (k Keyword) SPrint(readable bool) string {
 	return fmt.Sprintf(":%s", string(k))
 }
 
 func (Keyword) Key() {}
 
+func NewList() List {
+	return List{List: list.New()}
+}
+
+func (l List) Append(vs ...Valuer) {
+	for _, v := range vs {
+		l.PushBack(v)
+	}
+}
+
+func (l List) ToVector() *Vector {
+	vec := &Vector{}
+	for e := l.Front(); e != nil; e = e.Next() {
+		vec.Append(e.Value.(Valuer))
+	}
+	return vec
+}
+
 func (l List) IsEqaulTo(oth Valuer) bool {
-	o, ok := oth.(List)
-	if !ok {
+	var o List
+	switch x := oth.(type) {
+	case *Vector:
+		return l.ToVector().IsEqaulTo(x)
+	case List:
+		o = x
+	default:
 		return false
 	}
+
 	if l.Len() != o.Len() {
 		return false
 	}
@@ -242,13 +291,14 @@ func (l List) IsEqaulTo(oth Valuer) bool {
 	return true
 }
 
-func (l List) String() string {
+func (l List) SPrint(readable bool) string {
 	elems := []string{"("}
 	for i, elem := 0, l.Front(); elem != nil; i, elem = i+1, elem.Next() {
+		s := elem.Value.(Valuer).SPrint(readable)
 		if i == 0 {
-			elems = append(elems, fmt.Sprintf("%s", elem.Value))
+			elems = append(elems, s)
 		} else {
-			elems = append(elems, fmt.Sprintf(" %s", elem.Value))
+			elems = append(elems, " "+s)
 		}
 	}
 	elems = append(elems, ")")
@@ -271,7 +321,26 @@ func (v *Vector) Remove(elem Valuer) {
 	}
 }
 
+func (v *Vector) Len() int {
+	return len(*v)
+}
+
+func (v *Vector) ToList() List {
+	l := NewList()
+	l.Append((*v)...)
+	return l
+}
+
 func (v *Vector) IsEqaulTo(oth Valuer) bool {
+	var o *Vector
+	switch x := oth.(type) {
+	case List:
+		return v.ToList().IsEqaulTo(x)
+	case *Vector:
+		o = x
+	default:
+		return false
+	}
 	o, ok := oth.(*Vector)
 	if !ok {
 		return false
@@ -289,13 +358,14 @@ func (v *Vector) IsEqaulTo(oth Valuer) bool {
 	return true
 }
 
-func (v *Vector) String() string {
+func (v *Vector) SPrint(readable bool) string {
 	elems := []string{"["}
 	for i, elem := range *v {
+		s := elem.SPrint(readable)
 		if i == 0 {
-			elems = append(elems, fmt.Sprintf("%s", elem))
+			elems = append(elems, s)
 		} else {
-			elems = append(elems, fmt.Sprintf(" %s", elem))
+			elems = append(elems, " "+s)
 		}
 	}
 	elems = append(elems, "]")
@@ -319,14 +389,16 @@ func (m Map) IsEqaulTo(oth Valuer) bool {
 	return true
 }
 
-func (m Map) String() string {
+func (m Map) SPrint(readable bool) string {
 	elems := []string{"{"}
 	i := 0
 	for k, v := range m {
+		sk := k.SPrint(readable)
+		sv := v.SPrint(readable)
 		if i == 0 {
-			elems = append(elems, fmt.Sprintf("%s %s", k, v))
+			elems = append(elems, fmt.Sprintf("%s %s", sk, sv))
 		} else {
-			elems = append(elems, fmt.Sprintf(" %s %s", k, v))
+			elems = append(elems, fmt.Sprintf(" %s %s", sk, sv))
 		}
 		i++
 	}
@@ -334,14 +406,23 @@ func (m Map) String() string {
 	return strings.Join(elems, "")
 }
 
-func NewFunc(sign string, fn FuncType) Func {
-	return Func{signature: sign, Exec: fn}
+func NewFunc(name string, fn FuncType) Func {
+	return Func{name: name, Exec: fn}
+}
+
+func (f Func) IsLambda() bool {
+	return f.name == ""
 }
 
 func (f Func) IsEqaulTo(Valuer) bool {
 	return false
 }
 
-func (f Func) String() string {
-	return fmt.Sprintf("func<%s:%v>", f.signature, f.Exec)
+func (f Func) SPrint(readable bool) string {
+	return "#<function>"
+}
+
+func escape(s string) string {
+	s = strings.Replace(s, "\\", "\\\\", -1)
+	return s
 }

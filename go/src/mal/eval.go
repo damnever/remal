@@ -17,10 +17,9 @@ type Evaler struct {
 }
 
 func NewEvaler(env *Env) *Evaler {
-	env.Set("+", types.NewFunc("+", funcAdd))
-	env.Set("-", types.NewFunc("-", funcSub))
-	env.Set("*", types.NewFunc("*", funcMul))
-	env.Set("/", types.NewFunc("/", funcDiv))
+	for k, v := range funcmap {
+		env.Set(k, types.NewFunc(k, v))
+	}
 	return &Evaler{env: env}
 }
 
@@ -29,6 +28,7 @@ func (e *Evaler) EvalAST(a *ast.AST) (vs []types.Valuer, err error) {
 		var v types.Valuer
 		v, err = e.evalNode(node)
 		if err == errIgnore {
+			err = nil
 			return true
 		}
 		if err != nil {
@@ -45,11 +45,7 @@ func (e *Evaler) evalNode(node ast.Node) (types.Valuer, error) {
 	case *ast.Comment:
 		return nil, errIgnore
 	case *ast.Symbol:
-		env, err := e.env.Get(x.Content)
-		if err != nil {
-			return nil, fmt.Errorf("[%s] %v", x.Pos(), err)
-		}
-		return env, nil
+		return e.evalSymbol(x)
 	case *ast.AtomSingle:
 		return e.evalAtomSingle(x), nil
 	case *ast.AtomContainer:
@@ -61,13 +57,28 @@ func (e *Evaler) evalNode(node ast.Node) (types.Valuer, error) {
 	return types.NewRaw(node), nil
 }
 
+func (e *Evaler) evalSymbol(symbol *ast.Symbol) (types.Valuer, error) {
+	env, err := e.env.Get(symbol.Content)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] %v", symbol.Pos(), err)
+	}
+	return env, nil
+}
+
 func (e *Evaler) evalList(l *ast.List) (types.Valuer, error) {
+	// FIXME(damnever): fuck..
 	symbol, ok := l.Elems[0].(*ast.Symbol)
 	if !ok {
+		v, err := e.evalNode(l.Elems[0])
+		if err != nil {
+			return types.NewRaw(l), nil
+		}
+		if fn, ok := v.(types.Func); ok && fn.IsLambda() {
+			return e.evalFunc(fn, l.Elems[1:])
+		}
 		return types.NewRaw(l), nil
 	}
 
-	// FIXME(damnever): fuck..
 	switch symbol.Content {
 	case "def!":
 		v, err := e.evalNode(l.Elems[2])
@@ -77,12 +88,15 @@ func (e *Evaler) evalList(l *ast.List) (types.Valuer, error) {
 		e.env.Set(l.Elems[1].(*ast.Symbol).Content, v)
 		return v, nil
 	case "let*":
-		env := NewEnv(e.env)
+		env := NewEnv(e.env, nil, nil)
 		var elems []ast.Node
 		switch x := l.Elems[1].(type) {
 		case *ast.List:
 			elems = x.Elems
 		case *ast.AtomContainer:
+			if x.Kind != ast.Vector {
+				return nil, fmt.Errorf("[%s] expect list or vector, got map", x.Pos())
+			}
 			elems = x.Elems
 		}
 		for i := 0; i < len(elems); i = i + 2 {
@@ -90,11 +104,63 @@ func (e *Evaler) evalList(l *ast.List) (types.Valuer, error) {
 			env.Set(elems[i].(*ast.Symbol).Content, v)
 		}
 		return NewEvaler(env).evalNode(l.Elems[2])
+	case "do":
+		var v types.Valuer
+		for _, elem := range l.Elems[1:] {
+			var err error
+			if v, err = e.evalNode(elem); err != nil {
+				if err == errIgnore {
+					continue
+				}
+				return nil, err
+			}
+		}
+		return v, nil
+	case "if":
+		v1, err := e.evalNode(l.Elems[1])
+		if err != nil && err != errIgnore {
+			return nil, err
+		}
+		ok := true
+		switch x := v1.(type) {
+		case types.Nil:
+			ok = false
+		case types.Bool:
+			ok = bool(x)
+		default:
+		}
+		if ok {
+			return e.evalNode(l.Elems[2])
+		}
+		if len(l.Elems) < 4 {
+			return types.Nil{}, nil
+		}
+		return e.evalNode(l.Elems[3])
+	case "fn*":
+		binds := []string{}
+		var elems []ast.Node
+		switch x := l.Elems[1].(type) {
+		case *ast.List:
+			elems = x.Elems
+		case *ast.AtomContainer:
+			if x.Kind != ast.Vector {
+				return nil, fmt.Errorf("[%s] expect list or vector, got map", x.Pos())
+			}
+			elems = x.Elems
+		}
+		for _, elem := range elems {
+			binds = append(binds, elem.(*ast.Symbol).Content)
+		}
+		lambda := func(vs ...types.Valuer) (types.Valuer, error) {
+			env := NewEnv(e.env, binds, vs)
+			return NewEvaler(env).evalNode(l.Elems[2])
+		}
+		return types.NewFunc("", lambda), nil
 	default:
 	}
-	ev, err := e.env.Get(symbol.Content)
+	ev, err := e.evalSymbol(symbol)
 	if err != nil {
-		return nil, fmt.Errorf("[%s] %v", symbol.Pos(), err)
+		return nil, err
 	}
 	if fn, ok := ev.(types.Func); ok {
 		return e.evalFunc(fn, l.Elems[1:])

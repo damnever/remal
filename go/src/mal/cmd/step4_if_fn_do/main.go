@@ -42,6 +42,10 @@ func REP(line string, evaler *mal.Evaler) error {
 
 func main() {
 	evaler := mal.NewEvaler(mal.NewEnv(nil, nil, nil))
+	if err := REP("(def! not (fn* (a) (if a false true)))", evaler); err != nil {
+		fmt.Fprintf(os.Stderr, "ERR(not function): %v\n", err)
+		return
+	}
 
 	r := bufio.NewReader(os.Stdin)
 	for {
