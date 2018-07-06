@@ -169,9 +169,31 @@ func (r *tokenReader) readNumber() (t token.Token, err error) {
 
 func (r *tokenReader) readString() (t token.Token, err error) {
 	isfirst, slashs := true, 0
-	before := func() {
+	write := func(b byte) {
 		if slashs > 0 {
-			r.buf.WriteString(strings.Repeat("\\", slashs))
+			if n := slashs / 2; n > 0 {
+				r.buf.WriteString(strings.Repeat("\\", n))
+			}
+			if n := slashs % 2; n == 1 {
+				switch b {
+				case 'n':
+					r.buf.WriteByte('\n')
+				case 'r':
+					r.buf.WriteByte('\r')
+				case 't':
+					r.buf.WriteByte('\t')
+				case 'f':
+					r.buf.WriteByte('\f')
+				case 'b':
+					r.buf.WriteByte('\b')
+				default:
+					r.buf.WriteByte(b)
+				}
+			} else {
+				r.buf.WriteByte(b)
+			}
+		} else {
+			r.buf.WriteByte(b)
 		}
 	}
 	for {
@@ -184,23 +206,18 @@ func (r *tokenReader) readString() (t token.Token, err error) {
 			return
 		}
 		switch b {
-		case '\n':
-			before()
-			return
 		case '\\':
 			slashs++
 		case '"':
-			before()
-			r.buf.WriteByte(b)
+			write(b)
 			if !isfirst && slashs%2 == 0 {
 				t = token.STRING
 				return
 			}
 			isfirst, slashs = false, 0
 		default:
-			before()
+			write(b)
 			slashs = 0
-			r.buf.WriteByte(b)
 		}
 	}
 }

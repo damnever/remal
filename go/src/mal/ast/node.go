@@ -101,6 +101,9 @@ func (a *AtomSingle) End() token.Pos {
 }
 
 func (a *AtomSingle) String() string {
+	if a.Kind == String {
+		return fmt.Sprintf("%q", a.Content[1:len(a.Content)-1])
+	}
 	return a.Content
 }
 

@@ -23,21 +23,26 @@ func EVAL(a *ast.AST, evaler *mal.Evaler) ([]types.Valuer, error) {
 
 func PRINT(vs []types.Valuer) {
 	for _, v := range vs {
-		fmt.Printf("%s\n", v)
+		fmt.Println(v.SPrint(true))
 	}
 }
 
-func REP(line string) error {
+func REP(line string, evaler *mal.Evaler) error {
 	a, err := READ(line)
 	if err != nil {
 		return err
 	}
-	vs, _ := EVAL(a, new(mal.Evaler))
+	vs, err := EVAL(a, evaler)
+	if err != nil {
+		return err
+	}
 	PRINT(vs)
 	return nil
 }
 
 func main() {
+	evaler := mal.NewEvaler(mal.NewEnv(nil, nil, nil))
+
 	r := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("user> ")
@@ -49,7 +54,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
 			return
 		}
-		if err := REP(line); err != nil {
+		if err := REP(line, evaler); err != nil {
 			fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
 		}
 	}

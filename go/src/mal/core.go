@@ -82,7 +82,7 @@ func funcStr(vs ...types.Valuer) (types.Valuer, error) {
 }
 
 func funcPrintln(vs ...types.Valuer) (types.Valuer, error) {
-	s, err := funcprint("", false, vs...)
+	s, err := funcprint(" ", false, vs...)
 	if err != nil {
 		return nil, err
 	}

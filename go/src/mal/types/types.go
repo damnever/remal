@@ -224,7 +224,7 @@ func (s String) IsEqaulTo(oth Valuer) bool {
 
 func (s String) SPrint(readable bool) string {
 	if readable {
-		return fmt.Sprintf("\"%s\"", string(s))
+		return fmt.Sprintf("%q", string(s))
 	}
 	return string(s)
 }
@@ -420,9 +420,4 @@ func (f Func) IsEqaulTo(Valuer) bool {
 
 func (f Func) SPrint(readable bool) string {
 	return "#<function>"
-}
-
-func escape(s string) string {
-	s = strings.Replace(s, "\\", "\\\\", -1)
-	return s
 }

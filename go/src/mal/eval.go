@@ -67,6 +67,10 @@ func (e *Evaler) evalSymbol(symbol *ast.Symbol) (types.Valuer, error) {
 
 func (e *Evaler) evalList(l *ast.List) (types.Valuer, error) {
 	// FIXME(damnever): fuck..
+	if len(l.Elems) == 0 {
+		return types.NewRaw(l), nil
+	}
+
 	symbol, ok := l.Elems[0].(*ast.Symbol)
 	if !ok {
 		v, err := e.evalNode(l.Elems[0])
