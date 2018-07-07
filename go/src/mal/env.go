@@ -15,6 +15,7 @@ func NewEnv(outer *Env, binds []string, exprs []types.Valuer) *Env {
 		outer: outer,
 		data:  map[string]types.Valuer{},
 	}
+
 	for i, b := range binds {
 		if b == "&" {
 			l := types.NewList()
@@ -24,6 +25,7 @@ func NewEnv(outer *Env, binds []string, exprs []types.Valuer) *Env {
 		}
 		env.Set(b, exprs[i])
 	}
+
 	return env
 }
 

@@ -44,6 +44,11 @@ type (
 		name string
 		Exec FuncType
 	}
+	LambdaFunc struct {
+		Binds []string
+		Env   interface{}
+		Expr  interface{}
+	}
 )
 
 func NewRaw(x fmt.Stringer) Raw {
@@ -410,14 +415,26 @@ func NewFunc(name string, fn FuncType) Func {
 	return Func{name: name, Exec: fn}
 }
 
-func (f Func) IsLambda() bool {
-	return f.name == ""
-}
-
 func (f Func) IsEqaulTo(Valuer) bool {
 	return false
 }
 
 func (f Func) SPrint(readable bool) string {
+	return fmt.Sprintf("#<%s>", f.name)
+}
+
+func NewLambdaFunc(env, expr interface{}, binds []string) LambdaFunc {
+	return LambdaFunc{
+		Binds: binds,
+		Env:   env,
+		Expr:  expr,
+	}
+}
+
+func (f LambdaFunc) IsEqaulTo(Valuer) bool {
+	return false
+}
+
+func (f LambdaFunc) SPrint(readable bool) string {
 	return "#<function>"
 }
